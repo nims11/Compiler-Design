@@ -3,12 +3,6 @@
 	//Sizeof KW vs OP?
 	int line_no = 1;
 	const char *opname[128];
-#define INT 0x1
-#define FLOAT 0x2
-#define DOUBLE 0x4
-#define CHAR 0x8
-#define PTR 0x10
-#define ARR 0x20
 
 %}
 NUMBER 0|([1-9][0-9]*)
@@ -19,8 +13,8 @@ CHAR \'([^'\\]|\\.)*\'
 %option noyywrap
 %%
 auto {printf("%d: KW_auto\n",line_no);return KW_auto;}
-double {printf("%d: KW_double\n",line_no);yylval.intVal=DOUBLE;return KW_double;}
-int {printf("%d: KW_int\n",line_no);yylval.intVal=INT;return KW_int;}
+double {printf("%d: KW_double\n",line_no);return KW_double;}
+int {printf("%d: KW_int\n",line_no);return KW_int;}
 struct {printf("%d: KW_struct\n",line_no);return KW_struct;}
 break {printf("%d: KW_break\n",line_no);return KW_break;}
 else {printf("%d: KW_else\n",line_no);return KW_else;}
@@ -30,12 +24,12 @@ case {printf("%d: KW_case\n",line_no);return KW_case;}
 enum {printf("%d: KW_enum\n",line_no);return KW_enum;}
 register {printf("%d: KW_register\n",line_no);return KW_register;}
 typedef {printf("%d: KW_typedef\n",line_no);return KW_typedef;}
-char {printf("%d: KW_char\n",line_no);yylval.intVal=CHAR;return KW_char;}
+char {printf("%d: KW_char\n",line_no);return KW_char;}
 extern {printf("%d: KW_extern\n",line_no);return KW_extern;}
 return {printf("%d: KW_return\n",line_no);return KW_return;}
 union {printf("%d: KW_union\n",line_no);return KW_union;}
 const {printf("%d: KW_const\n",line_no);return KW_const;}
-float {printf("%d: KW_float\n",line_no);yylval.intVal=FLOAT;return KW_float;}
+float {printf("%d: KW_float\n",line_no);return KW_float;}
 short {printf("%d: KW_short\n",line_no);return KW_short;}
 unsigned {printf("%d: KW_unsigned\n",line_no);return KW_unsigned;}
 continue {printf("%d: KW_continue\n",line_no);return KW_continue;}
@@ -100,12 +94,12 @@ while {printf("%d: KW_while\n",line_no);return KW_while;}
 ";" {printf("%d: PUNC_SEMICOLON\n",line_no);return PUNC_SEMICOLON;}
 ":" {printf("%d: PUNC_COLON\n",line_no);return PUNC_COLON;}
 
-[a-zA-Z_][a-zA-Z_0-9]* {printf("%d: IDENTIFIER %s\n", line_no, yytext);yylval.strVal=malloc(strlen(yytext+1)); strcpy(yylval.strVal,yytext); return IDENTIFIER;}
+[a-zA-Z_][a-zA-Z_0-9]* {printf("%d: IDENTIFIER %s\n", line_no, yytext); return IDENTIFIER;}
 
-{NUMBER} {printf("%d: NUMBER %s\n", line_no, yytext);yylval.intVal=atoi(yytext); return NUMBER;}
-{REAL} {printf("%d: REAL_NUMBER %s\n", line_no, yytext); yylval.doubleVal=atof(yytext); return REAL_NUMBER;}
-{EXP} {printf("%d: EXP_NUMBER %s\n", line_no, yytext); yylval.doubleVal=atof(yytext);return EXP_NUMBER;}
-{CHAR} {printf("%d: CHAR_CONSTANT %s\n", line_no, yytext); yylval.charVal=yytext[1];return CHAR_CONSTANT;}
+{NUMBER} {printf("%d: NUMBER %s\n", line_no, yytext); return NUMBER;}
+{REAL} {printf("%d: REAL_NUMBER %s\n", line_no, yytext); return REAL_NUMBER;}
+{EXP} {printf("%d: EXP_NUMBER %s\n", line_no, yytext); return EXP_NUMBER;}
+{CHAR} {printf("%d: CHAR_CONSTANT %s\n", line_no, yytext); return CHAR_CONSTANT;}
 \"([^"\\]|\\.)*\" {printf("%d: STRING_CONSTANT %s\n", line_no, yytext); return STRING_CONSTANT;}
 
 . {}

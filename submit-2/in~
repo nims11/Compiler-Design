@@ -1,0 +1,2 @@
+int extern long unsigned register long x;
+main(){}
