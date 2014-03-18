@@ -18,6 +18,11 @@ typedef struct constVal{
 	struct constValList *parentLL;
 }constVal;
 
+typedef struct LL{
+	int val;
+	struct LL *next;
+}LL;
+
 typedef struct constValList{
 	int size;
 	struct constVal *head, *tail;
@@ -35,6 +40,7 @@ typedef struct symItem {
 	int type, line_no, size, init;
 	int arr_dim;
 	int newDec;
+	LL *dimsHead, *dimsTail;
 	constVal *value;
 	union {
 		char *str;
@@ -64,6 +70,8 @@ symItem *addSymItem(const char *name){
 	ret->init = 0;
 	ret->line_no = line_no;
 	ret->arr_dim = 0;
+	ret->dimsHead = NULL;
+	ret->dimsTail = NULL;
 	ret->name = malloc(32);
 	ret->value = NULL;
 	ret->newDec = 1;
@@ -82,11 +90,18 @@ symItem *addSymItem(const char *name){
 
 void printSymTable(){
 	symItem *curr = symTable;
+	LL *tmp;
 	printf("\n***Symbol Table***\n");
 	printf("Size: %d\n", symTableSize);
-	printf("Line\tID\ttype\tis_array\t(size)\tinit_value(s)\n");
+	printf("Line\tID\ttype\tis_array\t(size)\t\tinit_value(s)\n");
 	while(curr){
-		printf("%d\t%s\t%d\t%d\t\t%d\t", curr->line_no, curr->name, curr->type, (curr->arr_dim > 0), curr->size);
+		printf("%d\t%s\t%d\t%d\t\t", curr->line_no, curr->name, curr->type, (curr->arr_dim > 0));
+		tmp = curr->dimsHead;
+		if(!tmp)printf("0 ");
+		for(;tmp;tmp=tmp->next){
+			printf("%d ", tmp->val);
+		}
+		printf("\t\t");
 		if(curr->init && curr->value){
 			if(curr->arr_dim == 0){
 				switch(curr->type){

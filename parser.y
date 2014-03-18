@@ -1,7 +1,9 @@
 %{
 #include <stdio.h>
-#include "symTable.c"
 #include <stdlib.h>
+#include <string.h>
+#include "symTable.c"
+extern int line_no;
 #define INT 0x1
 #define FLOAT 0x2
 #define DOUBLE 0x4
@@ -198,9 +200,17 @@ direct-declarator: IDENTIFIER  {
 	printf("\tdirect-declarator ->  direct-declarator PUNC_OPSQRBKT constant-expression PUNC_CLOSESQRBKT \n");
 	$$ = $1;
 	$$->arr_dim++;
-	if(($3->type & INT) || ($3->type & CHAR))
-		$$->size = *(int*)$3->value;
-	else{
+	if(($3->type & INT) || ($3->type & CHAR)){
+		int size = *(int*)$3->value;
+		if($$->arr_dim == 1){
+			$$->size = size;
+			$$->dimsHead = $$->dimsTail = malloc(sizeof(LL*));
+		}else{
+			$$->dimsTail->next = malloc(sizeof(LL*));
+			$$->dimsTail = $$->dimsTail->next; $$->dimsTail->next = 0;
+		}
+		$$->dimsTail->val = size;
+	}else{
 		yyerror();
 		printf("Only Integer values allowed as array index\n");
 		exit(-1);
@@ -511,12 +521,59 @@ constant: NUMBER  {
 
 %%
 #include "lex.yy.c"
+int getans(int maxdims[], int dim[], int dims, int idx, int maxdimSize){
+	int max_col=1;
+	int i;
 
+	//if(idx >= dims)return 0;
+	for(i=idx+1;i<maxdimSize;i++){
+		max_col *= maxdims[i];
+	}
+	if(idx ==dims-1){
+		return dim[idx]*max_col;
+	}
+	//printf("%d %d\n", idx, max_col);
+	return max_col*dim[idx]+getans(maxdims, dim, dims, idx+1, maxdimSize);
+}
 int yyerror()
 {
 	printf("Error at line %d\n", line_no);
 }
-
+void post(){
+	char arrname[50];int dims;int i;
+	int dim[50];int max_dims[50];
+	int res;
+	LL *sizes;
+	symItem *it;
+	printf("Arr name: ");scanf("%s", arrname);
+	if(!(it=findSymItem(arrname))){
+		printf("Cannot find arrname\n");
+		return;
+	}
+	sizes = it->dimsHead;
+	for(i=0;sizes;i++, sizes=sizes->next){
+		max_dims[i] = sizes->val;
+	}
+	printf("No. of dim: ");scanf("%d", &dims);
+	if(dims>it->arr_dim){
+		printf("Dimension doesn't match\n");
+		return;
+	}
+	printf("elts : ");
+	for(i = 0;i<dims;i++){
+		scanf("%d", &dim[i]);
+	}
+	res = getans(max_dims, dim, dims, 0, it->arr_dim);
+	switch(it->type){
+		case INT: res *= 4;
+		break;
+		case DOUBLE: res *= 8;
+		break;
+		case FLOAT: res *= 4;
+		break;
+	}
+	printf("%d\n", res);
+}
 int main(int argc, char *argv[])
 {
 	if (argc != 2)
@@ -527,5 +584,6 @@ int main(int argc, char *argv[])
 	yyin = fopen(argv[1], "r");
 	yyparse();
 	printSymTable();
+	post();
 	return 0;
 }
