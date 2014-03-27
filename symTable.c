@@ -16,6 +16,7 @@ typedef struct constVal{
 	double doubleVal;
 	struct constVal *next;
 	struct constValList *parentLL;
+	char *inter;
 }constVal;
 
 typedef struct LL{
@@ -33,6 +34,18 @@ constValList *newConstValList(){
 	ret->head = ret->tail = NULL;
 	ret->size = 0;
 	return ret;
+}
+void appendConstValList(constValList *ll, constVal *item){
+	if(ll->head == NULL){
+		ll->head = ll->tail = item;
+		ll->size = 1;
+	}else{
+		ll->tail->next = item;
+		ll->tail = item;
+		ll->size++;
+	}
+	item->next = NULL;
+	item->parentLL = ll;
 }
 
 typedef struct symItem {
@@ -135,4 +148,33 @@ void printSymTable(){
 			printf("---\n");
 		curr = curr->next;
 	}
+}
+
+typedef struct charLL{
+	char str1[20], str2[20];
+	struct charLL *next;
+}charLL;
+charLL *maphead, *maptail;
+void appendMap(char *str1, char *str2){
+	charLL *item = malloc(sizeof(charLL));
+	strcpy(item->str1, str1);
+	strcpy(item->str2, str2);
+	if(maphead == NULL){
+		maphead = maptail = item;
+	}else{
+		maptail->next = item;
+		maptail = item;
+	}
+	item->next = NULL;
+}
+
+char *findMap(char *key){
+	charLL *tmp = maphead;
+	while(tmp){
+		if(strcmp(tmp->str1, key) == 0){
+			return tmp->str2;
+		}
+		tmp = tmp->next;
+	}
+	return NULL;
 }
