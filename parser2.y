@@ -3,7 +3,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include "symTable.c"
-extern int line_no;
+extern int line_no, labelCnt;
 FILE *interout;
 #define INT 0x1
 #define FLOAT 0x2
@@ -14,9 +14,10 @@ FILE *interout;
 char *getVar(){
     static int cnt = 0;
     char *ret = (char*)malloc(20);
-    sprintf(ret, "t_%d", cnt++);
+    sprintf(ret, "t_%d", labelCnt++);
     return ret;
 }
+
 char *resolveND(char *, constValList *);
 %}
 
@@ -60,12 +61,6 @@ declaration: declaration_specifiers init_declarator_list PUNC_SEMICOLON  {
         printf("\tdeclaration ->  declaration_specifiers init_declarator_list PUNC_SEMICOLON \n");
         $$ = $2;
         while(tmp){
-                if(tmp->newDec == 0){
-                        yyerror();
-                        printf("Redeclaration of variable %s, previously declared at line %d\n", tmp->name, tmp->line_no);
-                        exit(-1);
-                        YYERROR;
-                }
                 tmp->type |= $1;
                 tmp->newDec = 0;
                 if(tmp->init && tmp->value && tmp->size == -1){
@@ -200,7 +195,9 @@ direct_declarator: IDENTIFIER  {
         if(prev == NULL){
                 $$ = addSymItem($<strVal>1);
         }else {
-                $$ = prev;
+                yyerror();
+				printf("Redeclaration of variable %s, previously declared at line %d\n", prev->name, prev->line_no);
+				exit(-1);
         }
 }
 | PUNC_OPBKT declarator PUNC_CLOSEBKT  {printf("\tdirect_declarator ->  PUNC_OPBKT declarator PUNC_CLOSEBKT \n");}
@@ -336,12 +333,49 @@ statement_list: statement  {printf("\tstatement_list ->  statement \n");}
 | statement_list statement  {printf("\tstatement_list ->  statement_list statement \n");}
         ;
 
-selection_statement: KW_if PUNC_OPBKT expression PUNC_CLOSEBKT statement  {printf("\tselection_statement ->  KW_if PUNC_OPBKT expression PUNC_CLOSEBKT statement \n");}
-| KW_if PUNC_OPBKT expression PUNC_CLOSEBKT statement KW_else statement  {printf("\tselection_statement ->  KW_if PUNC_OPBKT expression PUNC_CLOSEBKT statement KW_else statement \n");}
+if_start: KW_if PUNC_OPBKT expression PUNC_CLOSEBKT 
+{
+	genLabel();
+	fprintf(interout, "IF FALSE %s, GOTO %s\n", $3->inter, top()->str);
+}
+		;
+		
+selection_statement: if_start statement  {
+	printf("\tselection_statement ->  KW_if PUNC_OPBKT expression PUNC_CLOSEBKT statement \n");
+	fprintf(interout, "%s:\n", top()->str);
+	pop();
+}
+| if_start statement KW_else
+{
+	char prev[20];
+	strcpy(prev, top()->str);
+	pop();
+	genLabel();
+	fprintf(interout, "GOTO %s\n", top()->str);
+	fprintf(interout, "%s:\n", prev);
+} statement  {
+	printf("\tselection_statement ->  KW_if PUNC_OPBKT expression PUNC_CLOSEBKT statement KW_else statement \n");
+	fprintf(interout, "%s:\n", top()->str);
+	pop();
+}
 | KW_switch PUNC_OPBKT expression PUNC_CLOSEBKT statement  {printf("\tselection_statement ->  KW_switch PUNC_OPBKT expression PUNC_CLOSEBKT statement \n");}
         ;
 
-iteration_statement: KW_while PUNC_OPBKT expression PUNC_CLOSEBKT statement  {printf("\titeration_statement ->  KW_while PUNC_OPBKT expression PUNC_CLOSEBKT statement \n");}
+iteration_statement: KW_while
+{
+	genLabel();
+	fprintf(interout, "%s:\n", top()->str);
+} PUNC_OPBKT expression PUNC_CLOSEBKT
+{
+	genLabel();
+	fprintf(interout, "IF FALSE %s, GOTO %s\n", $4->inter, top()->str);
+} statement  {
+	printf("\titeration_statement ->  KW_while PUNC_OPBKT expression PUNC_CLOSEBKT statement \n");
+	fprintf(interout, "GOTO %s\n", top()->next->str);
+	fprintf(interout, "%s:\n", top()->str);
+	pop();
+	pop();
+}
 | KW_do statement KW_while PUNC_OPBKT expression PUNC_CLOSEBKT PUNC_SEMICOLON  {printf("\titeration_statement ->  KW_do statement KW_while PUNC_OPBKT expression PUNC_CLOSEBKT PUNC_SEMICOLON \n");}
 | KW_for PUNC_OPBKT PUNC_SEMICOLON expression PUNC_SEMICOLON expression PUNC_SEMICOLON expression PUNC_CLOSEBKT statement  {printf("\titeration_statement ->  KW_for PUNC_OPBKT PUNC_SEMICOLON expression PUNC_SEMICOLON expression PUNC_SEMICOLON expression PUNC_CLOSEBKT statement \n");}
 | KW_for PUNC_OPBKT PUNC_SEMICOLON expression PUNC_SEMICOLON expression PUNC_SEMICOLON PUNC_CLOSEBKT statement  {printf("\titeration_statement ->  KW_for PUNC_OPBKT PUNC_SEMICOLON expression PUNC_SEMICOLON expression PUNC_SEMICOLON PUNC_CLOSEBKT statement \n");}
@@ -413,11 +447,23 @@ constant_expression: conditional_expression  {printf("\tconstant_expression ->  
         ;
 
 logical_OR_expression: logical_AND_expression  {printf("\tlogical_OR_expression ->  logical_AND_expression \n"); $$ = $1;}
-| logical_OR_expression OP_LOGOR logical_AND_expression  {printf("\tlogical_OR_expression ->  logical_OR_expression OP_LOGOR logical_AND_expression \n");}
+| logical_OR_expression OP_LOGOR logical_AND_expression  {
+	printf("\tlogical_OR_expression ->  logical_OR_expression OP_LOGOR logical_AND_expression \n");
+	char *tmp = getVar();
+    fprintf(interout, "%s = %s OR %s\n", tmp, $1->inter, $3->inter);
+    $$ = $1;
+    $$->inter = tmp;
+}
         ;
 
 logical_AND_expression: inclusive_OR_expression  {printf("\tlogical_AND_expression ->  inclusive_OR_expression \n"); $$ = $1;}
-| logical_AND_expression OP_LOGAND inclusive_OR_expression  {printf("\tlogical_AND_expression ->  logical_AND_expression OP_LOGAND inclusive_OR_expression \n");}
+| logical_AND_expression OP_LOGAND inclusive_OR_expression  {
+	printf("\tlogical_AND_expression ->  logical_AND_expression OP_LOGAND inclusive_OR_expression \n");
+	char *tmp = getVar();
+    fprintf(interout, "%s = %s AND %s\n", tmp, $1->inter, $3->inter);
+    $$ = $1;
+    $$->inter = tmp;
+}
         ;
 
 inclusive_OR_expression: exclusive_OR_expression  {printf("\tinclusive_OR_expression ->  exclusive_OR_expression \n"); $$ = $1;}
@@ -432,15 +478,51 @@ AND_expression: equality_expression  {printf("\tAND_expression ->  equality_expr
         ;
 
 equality_expression: relational_expression  {printf("\tequality_expression ->  relational_expression \n"); $$ = $1;}
-| equality_expression OP_EQ relational_expression  {printf("\tequality_expression ->  equality_expression OP_EQ relational_expression \n");}
-| equality_expression OP_NEQ relational_expression  {printf("\tequality_expression ->  equality_expression OP_NEQ relational_expression \n");}
+| equality_expression OP_EQ relational_expression  {
+	printf("\tequality_expression ->  equality_expression OP_EQ relational_expression \n");
+	char *tmp = getVar();
+    fprintf(interout, "%s = %s EQ %s\n", tmp, $1->inter, $3->inter);
+    $$ = $1;
+    $$->inter = tmp;
+}
+| equality_expression OP_NEQ relational_expression  {
+	printf("\tequality_expression ->  equality_expression OP_NEQ relational_expression \n");
+	char *tmp = getVar();
+    fprintf(interout, "%s = %s NEQ %s\n", tmp, $1->inter, $3->inter);
+    $$ = $1;
+    $$->inter = tmp;
+}
         ;
 
 relational_expression: shift_expression  {printf("\trelational_expression ->  shift_expression \n"); $$ = $1;}
-| relational_expression OP_LT shift_expression  {printf("\trelational_expression ->  relational_expression OP_LT shift_expression \n");}
-| relational_expression OP_GT shift_expression  {printf("\trelational_expression ->  relational_expression OP_GT shift_expression \n");}
-| relational_expression OP_LTE shift_expression  {printf("\trelational_expression ->  relational_expression OP_LTE shift_expression \n");}
-| relational_expression OP_GTE shift_expression  {printf("\trelational_expression ->  relational_expression OP_GTE shift_expression \n");}
+| relational_expression OP_LT shift_expression  {
+	printf("\trelational_expression ->  relational_expression OP_LT shift_expression \n");
+	char *tmp = getVar();
+    fprintf(interout, "%s = %s LT %s\n", tmp, $1->inter, $3->inter);
+    $$ = $1;
+    $$->inter = tmp;
+}
+| relational_expression OP_GT shift_expression  {
+	printf("\trelational_expression ->  relational_expression OP_GT shift_expression \n");
+	char *tmp = getVar();
+    fprintf(interout, "%s = %s GT %s\n", tmp, $1->inter, $3->inter);
+    $$ = $1;
+    $$->inter = tmp;
+}
+| relational_expression OP_LTE shift_expression  {
+	printf("\trelational_expression ->  relational_expression OP_LTE shift_expression \n");
+	char *tmp = getVar();
+    fprintf(interout, "%s = %s LTE %s\n", tmp, $1->inter, $3->inter);
+    $$ = $1;
+    $$->inter = tmp;
+}
+| relational_expression OP_GTE shift_expression  {
+	printf("\trelational_expression ->  relational_expression OP_GTE shift_expression \n");
+	char *tmp = getVar();
+    fprintf(interout, "%s = %s GTE %s\n", tmp, $1->inter, $3->inter);
+    $$ = $1;
+    $$->inter = tmp;
+}
         ;
 
 shift_expression: additive_expression  {printf("\tshift_expression ->  additive_expression \n"); $$ = $1;}
@@ -752,7 +834,6 @@ char *resolveND(char *arr, constValList *ll){
 	sprintf(arrSub, "%s[%s]", arr, idx);
 	appendMap(ret, arrSub);
 	return ret;
-	
 }
 int main(int argc, char *argv[])
 {

@@ -178,3 +178,24 @@ char *findMap(char *key){
 	}
 	return NULL;
 }
+typedef struct label{
+	char str[20];
+	struct label *next;
+}label;
+label *labelStackTop = NULL;
+int labelCnt = 1;
+label *top(){
+	return labelStackTop;
+}
+void pop(){
+	label *tmp = labelStackTop;
+	if(tmp == NULL)return;
+	labelStackTop = tmp->next;
+	free(tmp);
+}
+void genLabel(){
+	label *new = malloc(sizeof(label));
+	sprintf(new->str, "L_%d", labelCnt++);
+	new->next = labelStackTop;
+	labelStackTop = new;
+}
