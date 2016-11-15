@@ -11,10 +11,15 @@ FILE *interout;
 #define CHAR 0x8
 #define PTR 0x10
 #define ARR 0x20
+//#define LABEL_TMP_UNIFIED
+int tmpCnt = 0;
 char *getVar(){
-    static int cnt = 0;
     char *ret = (char*)malloc(20);
+    #ifdef LABEL_TMP_UNIFIED
     sprintf(ret, "t_%d", labelCnt++);
+    #else
+    sprintf(ret, "t_%d", tmpCnt++);
+    #endif
     return ret;
 }
 
@@ -337,12 +342,14 @@ if_start: KW_if PUNC_OPBKT expression PUNC_CLOSEBKT
 {
 	genLabel();
 	fprintf(interout, "IF FALSE %s, GOTO %s\n", $3->inter, top()->str);
+	addQuadItem('I', $3->inter, top()->str, 0);
 }
 		;
 		
 selection_statement: if_start statement  {
 	printf("\tselection_statement ->  KW_if PUNC_OPBKT expression PUNC_CLOSEBKT statement \n");
 	fprintf(interout, "%s:\n", top()->str);
+	addQuadItem('L', top()->str, 0, 0);
 	pop();
 }
 | if_start statement KW_else
@@ -352,10 +359,13 @@ selection_statement: if_start statement  {
 	pop();
 	genLabel();
 	fprintf(interout, "GOTO %s\n", top()->str);
+	addQuadItem('G', top()->str, 0, 0);
 	fprintf(interout, "%s:\n", prev);
+	addQuadItem('L', prev, 0, 0);
 } statement  {
 	printf("\tselection_statement ->  KW_if PUNC_OPBKT expression PUNC_CLOSEBKT statement KW_else statement \n");
 	fprintf(interout, "%s:\n", top()->str);
+	addQuadItem('L', top()->str, 0, 0);
 	pop();
 }
 | KW_switch PUNC_OPBKT expression PUNC_CLOSEBKT statement  {printf("\tselection_statement ->  KW_switch PUNC_OPBKT expression PUNC_CLOSEBKT statement \n");}
@@ -365,14 +375,16 @@ iteration_statement: KW_while
 {
 	genLabel();
 	fprintf(interout, "%s:\n", top()->str);
+	addQuadItem('L', top()->str, 0, 0);
 } PUNC_OPBKT expression PUNC_CLOSEBKT
 {
 	genLabel();
 	fprintf(interout, "IF FALSE %s, GOTO %s\n", $4->inter, top()->str);
+	addQuadItem('I', $4->inter, top()->str, 0);
 } statement  {
 	printf("\titeration_statement ->  KW_while PUNC_OPBKT expression PUNC_CLOSEBKT statement \n");
-	fprintf(interout, "GOTO %s\n", top()->next->str);
-	fprintf(interout, "%s:\n", top()->str);
+	fprintf(interout, "GOTO %s\n", top()->next->str);addQuadItem('G', top()->next->str, 0, 0);
+	fprintf(interout, "%s:\n", top()->str);addQuadItem('L', top()->str, 0, 0);
 	pop();
 	pop();
 }
@@ -407,19 +419,19 @@ assignment_expression: conditional_expression  {printf("\tassignment_expression 
 	}
     switch($<intVal>2){
         case OP_ASSIGN:
-        fprintf(interout, "%s = %s\n", $1->inter, $3->inter);
+        fprintf(interout, "%s = %s\n", $1->inter, $3->inter);addQuadItem('=', $1->inter, $3->inter, 0);
         break;
         case OP_PLUSEQ:
-        fprintf(interout, "%s = %s + %s\n", $1->inter, $1->inter, $3->inter);
+        fprintf(interout, "%s = %s + %s\n", $1->inter, $1->inter, $3->inter);addQuadItem('+', $1->inter, $1->inter, $3->inter);
         break;
         case OP_MINUSEQ:
-        fprintf(interout, "%s = %s - %s\n", $1->inter, $1->inter, $3->inter);
+        fprintf(interout, "%s = %s - %s\n", $1->inter, $1->inter, $3->inter);addQuadItem('-', $1->inter, $1->inter, $3->inter);
         break;
         case OP_MULEQ:
-        fprintf(interout, "%s = %s * %s\n", $1->inter, $1->inter, $3->inter);
+        fprintf(interout, "%s = %s * %s\n", $1->inter, $1->inter, $3->inter);addQuadItem('*', $1->inter, $1->inter, $3->inter);
         break;
         case OP_DIVEQ:
-        fprintf(interout, "%s = %s / %s\n", $1->inter, $1->inter, $3->inter);
+        fprintf(interout, "%s = %s / %s\n", $1->inter, $1->inter, $3->inter);addQuadItem('/', $1->inter, $1->inter, $3->inter);
         break;
     }
     $$ = $1;
@@ -450,7 +462,7 @@ logical_OR_expression: logical_AND_expression  {printf("\tlogical_OR_expression 
 | logical_OR_expression OP_LOGOR logical_AND_expression  {
 	printf("\tlogical_OR_expression ->  logical_OR_expression OP_LOGOR logical_AND_expression \n");
 	char *tmp = getVar();
-    fprintf(interout, "%s = %s OR %s\n", tmp, $1->inter, $3->inter);
+    fprintf(interout, "%s = %s OR %s\n", tmp, $1->inter, $3->inter);addQuadItem('o', tmp, $1->inter, $3->inter);
     $$ = $1;
     $$->inter = tmp;
 }
@@ -460,7 +472,7 @@ logical_AND_expression: inclusive_OR_expression  {printf("\tlogical_AND_expressi
 | logical_AND_expression OP_LOGAND inclusive_OR_expression  {
 	printf("\tlogical_AND_expression ->  logical_AND_expression OP_LOGAND inclusive_OR_expression \n");
 	char *tmp = getVar();
-    fprintf(interout, "%s = %s AND %s\n", tmp, $1->inter, $3->inter);
+    fprintf(interout, "%s = %s AND %s\n", tmp, $1->inter, $3->inter);addQuadItem('a', tmp, $1->inter, $3->inter);
     $$ = $1;
     $$->inter = tmp;
 }
@@ -481,14 +493,14 @@ equality_expression: relational_expression  {printf("\tequality_expression ->  r
 | equality_expression OP_EQ relational_expression  {
 	printf("\tequality_expression ->  equality_expression OP_EQ relational_expression \n");
 	char *tmp = getVar();
-    fprintf(interout, "%s = %s EQ %s\n", tmp, $1->inter, $3->inter);
+    fprintf(interout, "%s = %s EQ %s\n", tmp, $1->inter, $3->inter);addQuadItem('e', tmp, $1->inter, $3->inter);
     $$ = $1;
     $$->inter = tmp;
 }
 | equality_expression OP_NEQ relational_expression  {
 	printf("\tequality_expression ->  equality_expression OP_NEQ relational_expression \n");
 	char *tmp = getVar();
-    fprintf(interout, "%s = %s NEQ %s\n", tmp, $1->inter, $3->inter);
+    fprintf(interout, "%s = %s NEQ %s\n", tmp, $1->inter, $3->inter);addQuadItem('n', tmp, $1->inter, $3->inter);
     $$ = $1;
     $$->inter = tmp;
 }
@@ -498,28 +510,28 @@ relational_expression: shift_expression  {printf("\trelational_expression ->  sh
 | relational_expression OP_LT shift_expression  {
 	printf("\trelational_expression ->  relational_expression OP_LT shift_expression \n");
 	char *tmp = getVar();
-    fprintf(interout, "%s = %s LT %s\n", tmp, $1->inter, $3->inter);
+    fprintf(interout, "%s = %s LT %s\n", tmp, $1->inter, $3->inter);addQuadItem('<', tmp, $1->inter, $3->inter);
     $$ = $1;
     $$->inter = tmp;
 }
 | relational_expression OP_GT shift_expression  {
 	printf("\trelational_expression ->  relational_expression OP_GT shift_expression \n");
 	char *tmp = getVar();
-    fprintf(interout, "%s = %s GT %s\n", tmp, $1->inter, $3->inter);
+    fprintf(interout, "%s = %s GT %s\n", tmp, $1->inter, $3->inter);addQuadItem('>', tmp, $1->inter, $3->inter);
     $$ = $1;
     $$->inter = tmp;
 }
 | relational_expression OP_LTE shift_expression  {
 	printf("\trelational_expression ->  relational_expression OP_LTE shift_expression \n");
 	char *tmp = getVar();
-    fprintf(interout, "%s = %s LTE %s\n", tmp, $1->inter, $3->inter);
+    fprintf(interout, "%s = %s LTE %s\n", tmp, $1->inter, $3->inter);addQuadItem('l', tmp, $1->inter, $3->inter);
     $$ = $1;
     $$->inter = tmp;
 }
 | relational_expression OP_GTE shift_expression  {
 	printf("\trelational_expression ->  relational_expression OP_GTE shift_expression \n");
 	char *tmp = getVar();
-    fprintf(interout, "%s = %s GTE %s\n", tmp, $1->inter, $3->inter);
+    fprintf(interout, "%s = %s GTE %s\n", tmp, $1->inter, $3->inter);addQuadItem('g', tmp, $1->inter, $3->inter);
     $$ = $1;
     $$->inter = tmp;
 }
@@ -533,14 +545,14 @@ shift_expression: additive_expression  {printf("\tshift_expression ->  additive_
 additive_expression: multiplicative_expression  {printf("\tadditive_expression ->  multiplicative_expression \n"); $$ = $1;}
 | additive_expression OP_PLUS multiplicative_expression  {
     char *tmp = getVar();
-    fprintf(interout, "%s = %s + %s\n", tmp, $1->inter, $3->inter);
+    fprintf(interout, "%s = %s + %s\n", tmp, $1->inter, $3->inter);addQuadItem('+', tmp, $1->inter, $3->inter);
     $$ = $1;
     $$->inter = tmp;
     printf("\tadditive_expression ->  additive_expression OP_PLUS multiplicative_expression \n");
 }
 | additive_expression OP_MINUS multiplicative_expression  {
     char *tmp = getVar();
-    fprintf(interout, "%s = %s - %s\n", tmp, $1->inter, $3->inter);
+    fprintf(interout, "%s = %s - %s\n", tmp, $1->inter, $3->inter);addQuadItem('-', tmp, $1->inter, $3->inter);
     $$ = $1;
     $$->inter = tmp;
     printf("\tadditive_expression ->  additive_expression OP_MINUS multiplicative_expression \n");
@@ -552,12 +564,12 @@ multiplicative_expression: cast_expression  {printf("\tmultiplicative_expression
     char *tmp = getVar();
     printf("\tmultiplicative_expression ->  multiplicative_expression OP_STAR cast_expression \n");
     $$ = $1;
-    fprintf(interout, "%s = %s * %s\n", tmp, $1->inter, $3->inter);
+    fprintf(interout, "%s = %s * %s\n", tmp, $1->inter, $3->inter);addQuadItem('*', tmp, $1->inter, $3->inter);
     $$->inter = tmp;
 }
 | multiplicative_expression OP_DIV cast_expression  {
     char *tmp = getVar();
-    fprintf(interout, "%s = %s / %s\n", tmp, $1->inter, $3->inter);
+    fprintf(interout, "%s = %s / %s\n", tmp, $1->inter, $3->inter);addQuadItem('/', tmp, $1->inter, $3->inter);
     $$ = $1;
     $$->inter = tmp;
     printf("\tmultiplicative_expression ->  multiplicative_expression OP_DIV cast_expression \n");
@@ -580,20 +592,20 @@ unary_expression: postfix_expression  {
 }
 | OP_INCR unary_expression  {
     char *tmp = getVar();
-    fprintf(interout, "%s = %s + 1\n", $2->inter, $2->inter);
+    fprintf(interout, "%s = %s + 1\n", $2->inter, $2->inter);addQuadItem('+', $2->inter, $2->inter, "1");
     $$ = $2;
     printf("\tunary_expression ->  OP_INCR unary_expression \n");
 }
 | OP_DECR unary_expression  {
     char *tmp = getVar();
-    fprintf(interout, "%s = %s - 1\n", $2->inter, $2->inter);
+    fprintf(interout, "%s = %s - 1\n", $2->inter, $2->inter);addQuadItem('-', $2->inter, $2->inter, "1");
     $$ = $2;
     printf("\tunary_expression ->  OP_DECR unary_expression \n");
 }
 | unary_operator cast_expression  {
     if($<intVal>1 == 1){
         char *tmp = getVar();
-        fprintf(interout, "%s = -%s\n", tmp, $2->inter);
+        fprintf(interout, "%s = -%s\n", tmp, $2->inter);addQuadItem('m', tmp, $2->inter, 0);
         $$ = $2;
         $$->inter = tmp;
     }else
@@ -637,16 +649,16 @@ postfix_expression: primary_expression  {printf("\tpostfix_expression ->  primar
 | postfix_expression OP_DEREF IDENTIFIER  {printf("\tpostfix_expression ->  postfix_expression OP_DEREF IDENTIFIER \n");}
 | postfix_expression OP_INCR  {
     char *tmp = getVar();
-    fprintf(interout, "%s = %s\n", tmp, $1->inter);
-    fprintf(interout, "%s = %s + 1\n", $1->inter, $1->inter);
+    fprintf(interout, "%s = %s\n", tmp, $1->inter);addQuadItem('=', tmp, $1->inter, 0);
+    fprintf(interout, "%s = %s + 1\n", $1->inter, $1->inter);addQuadItem('+', $1->inter, $1->inter, "1");
     $$ = $1;
     $$->inter = tmp;
     printf("\tpostfix_expression ->  postfix_expression OP_INCR \n");
 }
 | postfix_expression OP_DECR  {
     char *tmp = getVar();
-    fprintf(interout, "%s = %s\n", tmp, $1->inter);
-    fprintf(interout, "%s = %s - 1\n", $1->inter, $1->inter);
+    fprintf(interout, "%s = %s\n", tmp, $1->inter);addQuadItem('=', tmp, $1->inter, 0);
+    fprintf(interout, "%s = %s - 1\n", $1->inter, $1->inter);addQuadItem('-', $1->inter, $1->inter, "1");
     $$ = $1;
     $$->inter = tmp;
     printf("\tpostfix_expression ->  postfix_expression OP_DECR \n");
@@ -749,20 +761,22 @@ char *getans(int maxdims[], char *dim[], int dims, int idx, int maxdimSize){
 	int max_col=1;
 	int i;
 	char *ret = getVar();
-	fprintf(interout, "%s = 1\n", ret);
+	char *nxt;
+	fprintf(interout, "%s = 1\n", ret);addQuadItem('=', ret, "1", 0);
 	
 	//if(idx >= dims)return 0;
 	for(i=idx+1;i<maxdimSize;i++){
 		max_col *= maxdims[i];
-		fprintf(interout, "%s = %s * %d\n", ret, ret, maxdims[i]);
+		fprintf(interout, "%s = %s * %d\n", ret, ret, maxdims[i]);addQuadItem('*', ret, ret, toStr(maxdims[i]));
 	}
-	fprintf(interout, "%s = %s * %s\n", ret, dim[idx], ret);
+	fprintf(interout, "%s = %s * %s\n", ret, dim[idx], ret);addQuadItem('*', ret, dim[idx], ret);
 	if(idx ==dims-1){
 		//return dim[idx]*max_col;
 		return ret;
 	}
 	//printf("%d %d\n", idx, max_col);
-	fprintf(interout, "%s = %s + %s\n", ret, ret, getans(maxdims, dim, dims, idx+1, maxdimSize));
+	nxt = getans(maxdims, dim, dims, idx+1, maxdimSize);
+	fprintf(interout, "%s = %s + %s\n", ret, ret, nxt);addQuadItem('+', ret, ret, nxt);
 	return ret;
 	//return max_col*dim[idx]+getans(maxdims, dim, dims, idx+1, maxdimSize);
 }
@@ -800,19 +814,19 @@ char *post(char *arrname, constValList *ll){
 	switch(it->type){
 		case INT:
 			ret = getVar();
-			fprintf(interout, "%s = %s * 4\n", ret, res);
+			fprintf(interout, "%s = %s * 4\n", ret, res);addQuadItem('*', ret, res, "4");
 		break;
 		case DOUBLE:
 			ret = getVar();
-			fprintf(interout, "%s = %s * 8\n", ret, res);
+			fprintf(interout, "%s = %s * 8\n", ret, res);addQuadItem('*', ret, res, "8");
 		break;
 		case FLOAT:
 			ret = getVar();
-			fprintf(interout, "%s = %s * 4\n", ret, res);
+			fprintf(interout, "%s = %s * 4\n", ret, res);addQuadItem('*', ret, res, "4");
 		break;
 		case CHAR:
 			ret = getVar();
-			fprintf(interout, "%s = %s\n", ret, res);
+			fprintf(interout, "%s = %s\n", ret, res);addQuadItem('=', ret, res, 0);
 		break;
 	}
 	//printf("%d\n", res);
@@ -830,21 +844,23 @@ char *resolveND(char *arr, constValList *ll){
 	//fprintf(stderr, "\n");
 	ret = getVar();
 	idx = post(arr, ll);
-	fprintf(interout, "%s = %s[%s]\n", ret, arr, idx); 
+	fprintf(interout, "%s = %s[%s]\n", ret, arr, idx); addQuadItem('[', ret, arr, idx);
 	sprintf(arrSub, "%s[%s]", arr, idx);
 	appendMap(ret, arrSub);
 	return ret;
 }
 int main(int argc, char *argv[])
 {
-        if (argc != 3)
+        if (argc != 4)
         {
-                printf("Enter filename to be Compiled and output file\n");
+                printf("./a.out inp.c out.i out.s\n");
                 return -1;
         }
         yyin = fopen(argv[1], "r");
         interout = fopen(argv[2], "w");
+        asmout = fopen(argv[3], "w");
         yyparse();
         printSymTable();
+        generate_code();
         return 0;
 }
